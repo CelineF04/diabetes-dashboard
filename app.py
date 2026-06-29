@@ -182,51 +182,76 @@ def find_default(filename):
 # ============================================================================
 with st.sidebar:
     st.markdown("## 🩺 Diabetes Dashboard")
-    st.caption("MSBA382 Healthcare Analytics — Consultant Dashboard")
+    st.caption("Healthcare Analytics — Consultant Dashboard")
 
-    # Try Google Drive first
-    url_2015 = "https://drive.google.com/uc?export=download&id=1wAsby6hXU9X6gPrixUoeG_LPvu38fSCU"
-    url_2022 = "https://drive.google.com/uc?export=download&id=1hyiTIOVTLNmQMY37JY3_gb0-tQEyyTyv"
+    # Primary: GitHub Release asset URLs (auto-load for shared app link)
+    url_2015 = "https://github.com/CelineF04/diabetes-dashboard/releases/download/v1.0/diabetes_2015_cleaned.csv"
+    url_2022 = "https://github.com/CelineF04/diabetes-dashboard/releases/download/v1.0/diabetes_2022_cleaned.csv"
 
     df22_raw, df15_raw = None, None
 
+    # Try remote URLs first
     try:
         df22_raw = load_csv(url_2022)
     except Exception:
-        pass
+        df22_raw = None
 
     try:
-     df15_raw = load_csv(url_2015)
+        df15_raw = load_csv(url_2015)
     except Exception:
-     pass
+        df15_raw = None
+
+    # Validate required columns (prevents KeyError crash)
+    required_22 = {"HadDiabetes", "Sex", "AgeCategory", "State"}
+    required_15 = {"Diabetes_binary", "Income", "Education", "NoDocbcCost"}
+
+    if df22_raw is not None:
+        df22_raw.columns = df22_raw.columns.str.strip()
+        if not required_22.issubset(set(df22_raw.columns)):
+            df22_raw = None
+
+    if df15_raw is not None:
+        df15_raw.columns = df15_raw.columns.str.strip()
+        if not required_15.issubset(set(df15_raw.columns)):
+            df15_raw = None
 
     # Fallback: local files next to app.py
     if df22_raw is None:
         df22_path = find_default("diabetes_2022_cleaned.csv")
         if df22_path:
-            df22_raw = load_csv(df22_path)
+            try:
+                df22_raw = load_csv(df22_path)
+            except Exception:
+                df22_raw = None
 
     if df15_raw is None:
         df15_path = find_default("diabetes_2015_cleaned.csv")
         if df15_path:
-            df15_raw = load_csv(df15_path)
+            try:
+                df15_raw = load_csv(df15_path)
+            except Exception:
+                df15_raw = None
 
     # Final fallback: manual upload
     if df22_raw is None:
-        up = st.file_uploader("Upload diabetes_2022_cleaned.csv", type="csv", key="up22")
+        up = st.file_uploader("Upload diabetes_2022_cleaned.csv", type=["csv"], key="up22")
         if up is not None:
             df22_raw = load_csv(up)
+
     if df15_raw is None:
-        up = st.file_uploader("Upload diabetes_2015_cleaned.csv", type="csv", key="up15")
+        up = st.file_uploader("Upload diabetes_2015_cleaned.csv", type=["csv"], key="up15")
         if up is not None:
             df15_raw = load_csv(up)
 
+    # Stop if still missing
     if df22_raw is None or df15_raw is None:
         st.warning("Upload both cleaned CSVs (from the Colab notebook) to load the dashboard.")
         st.stop()
 
+    # Prep
     df22 = prep_2022(df22_raw)
     df15 = prep_2015(df15_raw)
+  
     st.divider()
     st.markdown("### Filters — Tabs 1 & 2 (2022 data)")
     sex_opts = sorted(df22["Sex"].dropna().unique().tolist())
@@ -278,9 +303,9 @@ k3.metric("Respondents (2015 ds, filtered)", f"{len(df15_f):,}")
 k4.metric("Diabetes rate (2015 ds, filtered)", f"{df15_f['Diabetes_binary'].mean()*100:.1f}%")
 
 tab1, tab2, tab3 = st.tabs([
-    "1️⃣  How serious is diabetes?",
-    "2️⃣  Who is affected most?",
-    "3️⃣  Why inequality matters",
+    "How serious is diabetes?",
+    "Who is affected most?",
+    "Why inequality matters",
 ])
 
 # ============================================================================
