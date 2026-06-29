@@ -184,12 +184,34 @@ with st.sidebar:
     st.markdown("## 🩺 Diabetes Dashboard")
     st.caption("MSBA382 Healthcare Analytics — Consultant Dashboard")
 
-    df22_path = find_default("diabetes_2022_cleaned.csv")
-    df15_path = find_default("diabetes_2015_cleaned.csv")
+    # Try Google Drive first
+    url_2015 = "https://drive.google.com/uc?export=download&id=1wAsby6hXU9X6gPrixUoeG_LPvu38fSCU"
+    url_2022 = "https://drive.google.com/uc?export=download&id=1hyiTIOVTLNmQMY37JY3_gb0-tQEyyTyv"
 
-    df22_raw = load_csv(df22_path) if df22_path else None
-    df15_raw = load_csv(df15_path) if df15_path else None
+    df22_raw, df15_raw = None, None
 
+    try:
+        df22_raw = load_csv(url_2022)
+    except Exception:
+        pass
+
+    try:
+     df15_raw = load_csv(url_2015)
+    except Exception:
+     pass
+
+    # Fallback: local files next to app.py
+    if df22_raw is None:
+        df22_path = find_default("diabetes_2022_cleaned.csv")
+        if df22_path:
+            df22_raw = load_csv(df22_path)
+
+    if df15_raw is None:
+        df15_path = find_default("diabetes_2015_cleaned.csv")
+        if df15_path:
+            df15_raw = load_csv(df15_path)
+
+    # Final fallback: manual upload
     if df22_raw is None:
         up = st.file_uploader("Upload diabetes_2022_cleaned.csv", type="csv", key="up22")
         if up is not None:
@@ -205,7 +227,6 @@ with st.sidebar:
 
     df22 = prep_2022(df22_raw)
     df15 = prep_2015(df15_raw)
-
     st.divider()
     st.markdown("### Filters — Tabs 1 & 2 (2022 data)")
     sex_opts = sorted(df22["Sex"].dropna().unique().tolist())
