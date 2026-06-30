@@ -11,9 +11,6 @@ Data:
   diabetes_2015_cleaned.csv  (BRFSS 2015 — SES/access fields: Income, Education, NoDocbcCost)
   diabetes_2022_cleaned.csv (BRFSS 2022 — complications, demographics, lifestyle, State)
 
-Both files are produced by the companion Colab notebook (Diabetes_ABC_Analysis.ipynb)
-and are expected to sit next to this app.py when deployed. If they aren't found,
-the sidebar offers a manual upload so the app still runs.
 """
 
 import os
@@ -245,30 +242,57 @@ with st.sidebar:
 
     # Stop if still missing
     if df22_raw is None or df15_raw is None:
-        st.warning("Upload both cleaned CSVs (from the Colab notebook) to load the dashboard.")
+        st.warning("Upload both cleaned CSVs to load the dashboard.")
         st.stop()
 
     # Prep
     df22 = prep_2022(df22_raw)
     df15 = prep_2015(df15_raw)
-  
+
+    # Optional memory reduction for repeated filtering
+    for c in ["Sex", "AgeCategory", "State", "RaceEthnicityCategory", "SleepGroup", "SmokerGrouped"]:
+        if c in df22.columns:
+            df22[c] = df22[c].astype("category")
+    for c in ["Income_lbl", "Education_lbl", "Target_lbl"]:
+        if c in df15.columns:
+            df15[c] = df15[c].astype("category")
+
     st.divider()
     st.markdown("### Filters — Tabs 1 & 2 (2022 data)")
-    sex_opts = sorted(df22["Sex"].dropna().unique().tolist())
-    sex_sel = st.multiselect("Sex", sex_opts, default=sex_opts)
-
+    sex_opts = sorted(df22["Sex"].dropna().astype(str).unique().tolist())
     age_opts = sorted(
-        df22["AgeCategory"].dropna().unique().tolist(),
-        key=lambda c: df22.loc[df22["AgeCategory"] == c, "Age_mid"].iloc[0]
+        df22["AgeCategory"].dropna().astype(str).unique().tolist(),
+        key=lambda c: df22.loc[df22["AgeCategory"].astype(str) == c, "Age_mid"].iloc[0]
     )
-    age_sel = st.multiselect("Age category", age_opts, default=age_opts)
 
     st.divider()
     st.markdown("### Filters — Tab 3 (2015 SES data)")
-    inc_sel = st.multiselect("Income level", [x for x in INCOME_ORDER if x in df15["Income_lbl"].unique()],
-                              default=[x for x in INCOME_ORDER if x in df15["Income_lbl"].unique()])
-    edu_sel = st.multiselect("Education level", [x for x in EDUC_ORDER if x in df15["Education_lbl"].unique()],
-                              default=[x for x in EDUC_ORDER if x in df15["Education_lbl"].unique()])
+    inc_opts = [x for x in INCOME_ORDER if x in df15["Income_lbl"].astype(str).unique()]
+    edu_opts = [x for x in EDUC_ORDER if x in df15["Education_lbl"].astype(str).unique()]
+
+    # Persist filters; apply only on button click to avoid rerun crashes
+    if "filters" not in st.session_state:
+        st.session_state.filters = {
+            "sex": sex_opts,
+            "age": age_opts,
+            "inc": inc_opts,
+            "edu": edu_opts,
+        }
+
+    with st.form("filters_form"):
+        sex_sel = st.multiselect("Sex", sex_opts, default=st.session_state.filters["sex"])
+        age_sel = st.multiselect("Age category", age_opts, default=st.session_state.filters["age"])
+        inc_sel = st.multiselect("Income level", inc_opts, default=st.session_state.filters["inc"])
+        edu_sel = st.multiselect("Education level", edu_opts, default=st.session_state.filters["edu"])
+        apply_filters = st.form_submit_button("Apply Filters")
+
+    if apply_filters:
+        st.session_state.filters = {
+            "sex": sex_sel,
+            "age": age_sel,
+            "inc": inc_sel,
+            "edu": edu_sel,
+        }
 
     st.divider()
     with st.expander("About this dashboard"):
@@ -276,12 +300,17 @@ with st.sidebar:
             "Built on two CDC BRFSS surveys (2015 and 2022). The 2022 file carries "
             "complication outcomes, demographics, lifestyle and state; the 2015 file "
             "carries income, education, and healthcare-cost-barrier fields. "
-            "Diabetes definitions differ slightly between the two surveys (see report)."
         )
 
 # Apply filters
-df22_f = df22[df22["Sex"].isin(sex_sel) & df22["AgeCategory"].isin(age_sel)]
-df15_f = df15[df15["Income_lbl"].isin(inc_sel) & df15["Education_lbl"].isin(edu_sel)]
+@st.cache_data(show_spinner=False)
+def apply_all_filters(df22, df15, sex, age, inc, edu):
+    m22 = df22["Sex"].astype(str).isin(sex) & df22["AgeCategory"].astype(str).isin(age)
+    m15 = df15["Income_lbl"].astype(str).isin(inc) & df15["Education_lbl"].astype(str).isin(edu)
+    return df22.loc[m22].copy(), df15.loc[m15].copy()
+
+f = st.session_state.filters
+df22_f, df15_f = apply_all_filters(df22, df15, f["sex"], f["age"], f["inc"], f["edu"])
 
 if df22_f.empty:
     st.warning("No 2022 rows match the current filters — showing the unfiltered dataset instead.")
@@ -391,9 +420,9 @@ with tab1:
             st.info("Not enough filtered data to fit the adjusted models — widen the filters.")
 
     st.info(
-        "💡 **Insight:** diabetics report major complications at multiples of the rate of non-diabetics, "
-        "and the gap survives adjustment for age and sex — diabetes carries real downstream risk, which "
-        "is the case for why prevalence and inequality (next two tabs) matter."
+        "**Insight:** People with diabetes report major complications far more often than people without diabetes. "
+        "This difference remains even after adjusting age and gender, howing that diabetes itself is strongly linked "
+        "to serious downstream health risks. This is why tracking diabetes prevalence and inequality is so important."
     )
 
 # ============================================================================
@@ -495,12 +524,12 @@ with tab2:
         st.dataframe(top10.rename(columns={"Diabetes_pct": "Diabetes %"}), hide_index=True, width="stretch")
         st.caption(
             "Plotly's USA-states map can't render territories, but Puerto Rico "
-            "typically tops this ranking — which motivates the next tab."
+            "typically tops this ranking, which motivates the next tab."
         )
 
     st.info(
-        "💡 **Insight:** prevalence climbs with age, varies by sex/race, worsens with inactivity, short sleep, "
-        "and smoking, and is highest in several lower-income states/territories — pointing toward structural, "
+        "**Insight:** prevalence increases with age, varies by gender/race, worsens with inactivity, long sleep, "
+        "and smoking, and is highest in several lower-income states/territories, pointing toward structural, "
         "not just individual, drivers."
     )
 
@@ -566,7 +595,7 @@ with tab3:
         show(fig)
 
     st.markdown("##### Structural drivers in the full risk model")
-    st.caption("Trained once on the full 2015 dataset (not affected by sidebar filters) — shows overall structural effects")
+    st.caption("Trained on the full 2015 dataset (not affected by sidebar filters) — shows overall structural effects")
 
     @st.cache_data(show_spinner="Fitting model...")
     def fit_full_model(df):
@@ -596,9 +625,9 @@ with tab3:
     show(fig)
 
     st.info(
-        "💡 **Insight:** diabetes prevalence falls steadily as income and education rise, the two compound "
-        "at the bottom of the grid, and low-income diabetics face the steepest cost barriers to care — "
-        "the people most at risk are often the least able to afford treatment."
+        "**Insight:** Income and education show the expected protective pattern (higher levels linked to lower risk), "
+        "while “AnyHealthcare” is positively associated with diabetes; this likely reflects that people already at higher "
+        "risk or living with diabetes are more connected to the healthcare system"
     )
 
 st.divider()
