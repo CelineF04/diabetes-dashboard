@@ -265,7 +265,6 @@ with st.sidebar:
         key=lambda c: df22.loc[df22["AgeCategory"].astype(str) == c, "Age_mid"].iloc[0]
     )
 
-    st.divider()
     st.markdown("### Filters — Tab 3 (2015 SES data)")
     inc_opts = [x for x in INCOME_ORDER if x in df15["Income_lbl"].astype(str).unique()]
     edu_opts = [x for x in EDUC_ORDER if x in df15["Education_lbl"].astype(str).unique()]
@@ -421,7 +420,7 @@ with tab1:
 
     st.info(
         "**Insight:** People with diabetes report major complications far more often than people without diabetes. "
-        "This difference remains even after adjusting age and gender, howing that diabetes itself is strongly linked "
+        "This difference remains even after adjusting age and gender, showing that diabetes itself is strongly linked "
         "to serious downstream health risks. This is why tracking diabetes prevalence and inequality is so important."
     )
 
